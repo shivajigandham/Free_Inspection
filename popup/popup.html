@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebScope</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="app-header">
+        <div class="brand-mark">W</div>
+        <div>
+          <p class="eyebrow">SITE INSPECTOR</p>
+          <h1>WebScope</h1>
+        </div>
+        <button id="refresh" class="refresh" title="Analyze again" aria-label="Analyze again">↻</button>
+      </header>
+
+      <section id="loading" class="loading-card" aria-live="polite">
+        <span class="spinner"></span> Analyzing this page…
+      </section>
+      <section id="error" class="error-card" hidden></section>
+
+      <div id="results" hidden>
+        <section class="site-card">
+          <div class="site-icon">◈</div>
+          <div class="site-copy">
+            <p id="domain" class="domain"></p>
+            <p id="url" class="url"></p>
+          </div>
+          <span id="protocol" class="status-badge"></span>
+        </section>
+
+        <section class="section">
+          <h2>Overview</h2>
+          <p id="title" class="page-title"></p>
+          <dl class="metrics two-column">
+            <div><dt>Links</dt><dd id="links"></dd></div>
+            <div><dt>Images</dt><dd id="images"></dd></div>
+            <div><dt>Scripts</dt><dd id="scripts"></dd></div>
+            <div><dt>Stylesheets</dt><dd id="stylesheets"></dd></div>
+            <div class="span-two"><dt>DOM elements</dt><dd id="elements"></dd></div>
+          </dl>
+        </section>
+
+        <section class="section performance-section">
+          <h2>Performance</h2>
+          <div class="metric-row"><span>Page load</span><strong id="load"></strong></div>
+          <div class="metric-row"><span>DOM ready</span><strong id="domReady"></strong></div>
+        </section>
+
+        <section class="section network-section">
+          <div class="section-heading">
+            <h2>Network &amp; server</h2>
+            <span id="responseStatus" class="response-status"></span>
+          </div>
+          <dl class="metrics two-column network-metrics">
+            <div><dt>IPv4 address</dt><dd id="ipv4" class="compact-value"></dd></div>
+            <div><dt>IPv6 address</dt><dd id="ipv6" class="compact-value"></dd></div>
+            <div><dt>Server</dt><dd id="server" class="compact-value"></dd></div>
+            <div><dt>CDN</dt><dd id="cdn" class="compact-value"></dd></div>
+            <div><dt>ISP / network</dt><dd id="isp" class="compact-value"></dd></div>
+            <div><dt>ASN</dt><dd id="asn" class="compact-value"></dd></div>
+          </dl>
+          <p id="cdnEvidence" class="supporting-copy"></p>
+        </section>
+
+        <section class="section dns-section">
+          <h2>DNS records</h2>
+          <dl class="dns-list">
+            <div><dt>A</dt><dd id="dnsA"></dd></div>
+            <div><dt>AAAA</dt><dd id="dnsAAAA"></dd></div>
+            <div><dt>CNAME</dt><dd id="dnsCname"></dd></div>
+          </dl>
+        </section>
+
+        <section class="section headers-section">
+          <div class="section-heading">
+            <h2>HTTP response</h2>
+            <span id="responseSource" class="subtle-badge"></span>
+          </div>
+          <p id="responseUrl" class="url"></p>
+          <details>
+            <summary><span id="headerCount">0</span> response headers</summary>
+            <dl id="headers" class="header-list"></dl>
+          </details>
+        </section>
+
+        <section class="section browser-section">
+          <h2>Browser</h2>
+          <p id="browser" class="browser-name"></p>
+          <p id="userAgent" class="user-agent"></p>
+        </section>
+      </div>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

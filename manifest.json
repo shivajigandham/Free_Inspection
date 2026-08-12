@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "WebScope",
+  "description": "A lightweight website analyzer for the current tab.",
+  "version": "0.1.0",
+  "permissions": ["activeTab", "scripting", "storage", "tabs", "webRequest"],
+  "host_permissions": [
+    "<all_urls>",
+    "https://cloudflare-dns.com/*",
+    "https://ipapi.co/*"
+  ],
+  "action": {
+    "default_title": "Analyze with WebScope",
+    "default_popup": "popup/popup.html"
+  },
+  "background": {
+    "service_worker": "background/background.js",
+    "type": "module"
+  }
+}
