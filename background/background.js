@@ -114,6 +114,142 @@ function detectCdn(headers, cname) {
     : { name: "Not detected", evidence: "No recognized CDN signature" };
 }
 
+function detectHeaderTechnologies(headers) {
+  const server = headerValue(headers, "server");
+  const poweredBy = headerValue(headers, "x-powered-by");
+  const generator = headerValue(headers, "x-generator");
+  const findings = [];
+
+  function add(name, category, evidence) {
+    findings.push({ name, category, evidence: [evidence] });
+  }
+
+  if (/nginx/i.test(server)) add("Nginx", "Server", `Server header: ${server}`);
+  if (/apache/i.test(server)) add("Apache", "Server", `Server header: ${server}`);
+  if (/microsoft-iis/i.test(server)) add("Microsoft IIS", "Server", `Server header: ${server}`);
+  if (/express/i.test(poweredBy)) add("Express", "Server", `X-Powered-By header: ${poweredBy}`);
+  if (/php/i.test(poweredBy)) add("PHP", "Runtime", `X-Powered-By header: ${poweredBy}`);
+  if (/wordpress/i.test(generator)) add("WordPress", "CMS", `X-Generator header: ${generator}`);
+  if (/drupal/i.test(generator)) add("Drupal", "CMS", `X-Generator header: ${generator}`);
+
+  return findings;
+}
+
+function getSecuritySnapshot(url, headers) {
+  const secure = new URL(url).protocol === "https:";
+  const checks = [
+    ["HTTPS", secure, secure ? "The page is served over HTTPS" : "The page is not served over HTTPS"],
+    ["HSTS", Boolean(headerValue(headers, "strict-transport-security")), "Strict-Transport-Security response header"],
+    ["CSP", Boolean(headerValue(headers, "content-security-policy")), "Content-Security-Policy response header"],
+    ["Frame protection", Boolean(headerValue(headers, "x-frame-options") || headerValue(headers, "content-security-policy").includes("frame-ancestors")), "X-Frame-Options or CSP frame-ancestors"],
+    ["Referrer policy", Boolean(headerValue(headers, "referrer-policy")), "Referrer-Policy response header"],
+    ["Permissions policy", Boolean(headerValue(headers, "permissions-policy")), "Permissions-Policy response header"]
+  ];
+  return checks.map(([name, present, evidence]) => ({ name, present, evidence }));
+}
+
+function mergeTechnologies(...groups) {
+  const merged = new Map();
+  groups.filter(Array.isArray).flat().forEach((item) => {
+    const key = `${item.category}:${item.name}`;
+    if (!merged.has(key)) merged.set(key, { name: item.name, category: item.category, evidence: [] });
+    const result = merged.get(key);
+    (item.evidence || []).forEach((evidence) => {
+      if (!result.evidence.includes(evidence)) result.evidence.push(evidence);
+    });
+  });
+  return [...merged.values()]
+    .map((item) => ({ ...item, evidence: item.evidence.sort() }))
+    .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+}
+
+// This function runs in the inspected page's main JavaScript world so it can
+// see framework runtime markers that are intentionally isolated from extension
+// content scripts. It returns plain data only; it never modifies the page.
+function collectMainWorldTechnologies() {
+  const findings = new Map();
+  const urls = [
+    ...[...document.scripts].map((script) => script.src),
+    ...performance.getEntriesByType("resource").map((entry) => entry.name)
+  ].filter(Boolean).join("\n").toLowerCase();
+
+  function add(name, category, evidence) {
+    const key = `${category}:${name}`;
+    if (!findings.has(key)) findings.set(key, { name, category, evidence: [] });
+    const item = findings.get(key);
+    if (!item.evidence.includes(evidence)) item.evidence.push(evidence);
+  }
+
+  function safe(check) {
+    try {
+      return Boolean(check());
+    } catch {
+      return false;
+    }
+  }
+
+  function hasUrl(pattern) {
+    return pattern.test(urls);
+  }
+
+  function hasElementProperty(pattern) {
+    const nodes = [document.documentElement, document.body, ...[...document.querySelectorAll("body *")].slice(0, 750)].filter(Boolean);
+    return nodes.some((node) => {
+      try {
+        return Object.getOwnPropertyNames(node).some((name) => pattern.test(name));
+      } catch {
+        return false;
+      }
+    });
+  }
+
+  if (document.getElementById("__NEXT_DATA__") || safe(() => window.next?.router) || hasUrl(/\/_next\//)) {
+    add("Next.js", "Framework", document.getElementById("__NEXT_DATA__") ? "#__NEXT_DATA__ page payload" : hasUrl(/\/_next\//) ? "Loaded resource path contains /_next/" : "Next.js runtime global");
+  }
+
+  if (safe(() => window.__REACT_DEVTOOLS_GLOBAL_HOOK__) || hasElementProperty(/^__(?:reactFiber|reactProps|reactContainer)\$/) || document.querySelector("[data-reactroot], [data-reactid]")) {
+    add("React", "Framework", hasElementProperty(/^__(?:reactFiber|reactProps|reactContainer)\$/) ? "React runtime property attached to a DOM node" : safe(() => window.__REACT_DEVTOOLS_GLOBAL_HOOK__) ? "React runtime global hook" : "React root attribute in DOM");
+  }
+
+  if (document.querySelector("[ng-version]") || safe(() => window.getAllAngularRootElements || window.ng?.getComponent) || hasElementProperty(/^__ngContext__$/)) {
+    add("Angular", "Framework", document.querySelector("[ng-version]") ? "ng-version attribute in DOM" : hasElementProperty(/^__ngContext__$/) ? "Angular context property attached to a DOM node" : "Angular runtime global API");
+  }
+
+  if (document.querySelector("[data-v-app]") || safe(() => window.__VUE__ || window.__VUE_DEVTOOLS_GLOBAL_HOOK__) || hasElementProperty(/^__(?:vue_app__|vueParentComponent)$/)) {
+    add("Vue.js", "Framework", document.querySelector("[data-v-app]") ? "data-v-app root attribute in DOM" : hasElementProperty(/^__(?:vue_app__|vueParentComponent)$/) ? "Vue runtime property attached to a DOM node" : "Vue runtime global hook");
+  }
+
+  if (safe(() => window.jQuery?.fn?.jquery || window.$?.fn?.jquery)) {
+    const version = window.jQuery?.fn?.jquery || window.$?.fn?.jquery;
+    add("jQuery", "Library", `jQuery global API (v${version})`);
+  }
+  if (safe(() => window.bootstrap?.Modal)) add("Bootstrap", "Library", "Bootstrap runtime global API");
+
+  if (safe(() => window.drupalSettings)) add("Drupal", "CMS", "drupalSettings runtime global");
+  if (safe(() => window.Shopify?.theme || window.Shopify?.shop)) add("Shopify", "CMS", "Shopify runtime global");
+  if (safe(() => window.wp?.api || window.wpApiSettings)) add("WordPress", "CMS", "WordPress runtime global");
+
+  if (safe(() => typeof window.gtag === "function" || typeof window.ga === "function")) add("Google Analytics", "Analytics", "gtag or ga runtime global");
+  if (safe(() => Array.isArray(window.dataLayer) && window.dataLayer.some((item) => item?.event === "gtm.js"))) add("Google Tag Manager", "Analytics", "GTM runtime data layer");
+
+  return [...findings.values()]
+    .map((item) => ({ ...item, evidence: item.evidence.sort() }))
+    .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+}
+
+function getMainWorldTechnologies(tabId, callback) {
+  chrome.scripting.executeScript(
+    { target: { tabId }, func: collectMainWorldTechnologies, world: "MAIN" },
+    (results) => {
+      if (chrome.runtime.lastError) {
+        callback([]);
+        return;
+      }
+      callback(results?.[0]?.result || []);
+    }
+  );
+}
+
 async function scanNetwork(tab) {
   const hostname = new URL(tab.url).hostname;
   const [response, dns] = await Promise.all([getCapturedHeaders(tab), getDns(hostname)]);
@@ -133,7 +269,9 @@ async function scanNetwork(tab) {
       url: response.url,
       source: response.source || "Captured from page load",
       headers: response.headers.sort((a, b) => a.name.localeCompare(b.name))
-    }
+    },
+    technologies: detectHeaderTechnologies(response.headers),
+    security: getSecuritySnapshot(response.url, response.headers)
   };
 }
 
@@ -146,21 +284,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
 
-    chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content/content.js"] }, () => {
+    chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content/technology.js", "content/content.js"] }, () => {
       if (chrome.runtime.lastError) {
         sendResponse({ ok: false, error: chrome.runtime.lastError.message });
         return;
       }
-      chrome.tabs.sendMessage(tab.id, { type: "WEBSCOPE_COLLECT" }, async (page) => {
-        if (chrome.runtime.lastError) {
-          sendResponse({ ok: false, error: chrome.runtime.lastError.message });
-          return;
-        }
-        try {
-          sendResponse({ ok: true, data: { ...page, network: await scanNetwork(tab) } });
-        } catch {
-          sendResponse({ ok: true, data: { ...page, network: null } });
-        }
+      getMainWorldTechnologies(tab.id, (mainWorldTechnologies) => {
+        chrome.tabs.sendMessage(tab.id, { type: "WEBSCOPE_COLLECT_V3" }, async (page) => {
+          if (chrome.runtime.lastError) {
+            sendResponse({ ok: false, error: chrome.runtime.lastError.message });
+            return;
+          }
+          try {
+            const network = await scanNetwork(tab);
+            sendResponse({
+              ok: true,
+              data: {
+                ...page,
+                network,
+                technologies: mergeTechnologies(page.technologies, mainWorldTechnologies, network.technologies)
+              }
+            });
+          } catch {
+            sendResponse({ ok: true, data: { ...page, network: null, technologies: mergeTechnologies(page.technologies, mainWorldTechnologies) } });
+          }
+        });
       });
     });
   });
