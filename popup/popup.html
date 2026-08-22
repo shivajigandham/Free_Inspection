@@ -9,11 +9,13 @@
   <body>
     <main class="app-shell">
       <header class="app-header">
-        <div class="brand-mark">W</div>
-        <div>
-          <p class="eyebrow">SITE INSPECTOR</p>
-          <h1>WebScope</h1>
+        <div class="brand-mark" aria-hidden="true">⌁</div>
+        <div class="brand-copy">
+          <p class="eyebrow">PERIMETER INTELLIGENCE</p>
+          <h1>WEBSCOPE <span>SENTINEL</span></h1>
+          <p class="monitor-state"><span></span>PASSIVE SCAN READY</p>
         </div>
+        <button id="copyReport" class="copy-report" title="Copy scan report" aria-label="Copy scan report" disabled>Copy report</button>
         <button id="refresh" class="refresh" title="Analyze again" aria-label="Analyze again">↻</button>
       </header>
 
@@ -24,8 +26,9 @@
 
       <div id="results" hidden>
         <section class="site-card">
-          <div class="site-icon">◈</div>
+          <div class="site-icon">◎</div>
           <div class="site-copy">
+            <p class="target-label">ACTIVE TARGET</p>
             <p id="domain" class="domain"></p>
             <p id="url" class="url"></p>
           </div>
@@ -48,6 +51,28 @@
           <h2>Performance</h2>
           <div class="metric-row"><span>Page load</span><strong id="load"></strong></div>
           <div class="metric-row"><span>DOM ready</span><strong id="domReady"></strong></div>
+        </section>
+
+        <section class="section resource-section">
+          <h2>Resource footprint</h2>
+          <dl class="metrics two-column resource-metrics">
+            <div><dt>Resources</dt><dd id="resourceTotal"></dd></div>
+            <div><dt>Transfer size</dt><dd id="transferSize"></dd></div>
+            <div><dt>Scripts</dt><dd id="resourceScripts"></dd></div>
+            <div><dt>Images</dt><dd id="resourceImages"></dd></div>
+            <div><dt>Stylesheets</dt><dd id="resourceStylesheets"></dd></div>
+            <div><dt>Fonts / other</dt><dd id="resourceOther"></dd></div>
+          </dl>
+          <p class="supporting-copy">Transfer size can be lower for cached or cross-origin resources.</p>
+        </section>
+
+        <section class="section technology-section">
+          <div class="section-heading">
+            <h2>Technology evidence</h2>
+            <span id="technologyCount" class="subtle-badge">0 detected</span>
+          </div>
+          <p id="technologyEmpty" class="supporting-copy" hidden>No public technology signatures were found. This does not prove the website has no framework or backend technology.</p>
+          <div id="technologyList" class="technology-list"></div>
         </section>
 
         <section class="section network-section">
@@ -85,6 +110,15 @@
             <summary><span id="headerCount">0</span> response headers</summary>
             <dl id="headers" class="header-list"></dl>
           </details>
+        </section>
+
+        <section class="section security-section">
+          <div class="section-heading">
+            <h2>Security snapshot</h2>
+            <span id="securityCount" class="subtle-badge"></span>
+          </div>
+          <div id="securityList" class="security-list"></div>
+          <p class="supporting-copy">These are configuration signals, not a vulnerability assessment.</p>
         </section>
 
         <section class="section browser-section">

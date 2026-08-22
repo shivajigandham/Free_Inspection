@@ -3,7 +3,7 @@
   "name": "WebScope",
   "description": "A lightweight website analyzer for the current tab.",
   "version": "0.1.0",
-  "permissions": ["activeTab", "scripting", "storage", "tabs", "webRequest"],
+  "permissions": ["activeTab", "clipboardWrite", "scripting", "storage", "tabs", "webRequest"],
   "host_permissions": [
     "<all_urls>",
     "https://cloudflare-dns.com/*",

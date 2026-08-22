@@ -1,4 +1,4 @@
-# WebScope — Phases 1 & 2
+# WebScope — Phases 1–3
 
 A Manifest V3 Chrome extension that analyzes the currently open webpage without a backend.
 
@@ -16,6 +16,19 @@ A Manifest V3 Chrome extension that analyzes the currently open webpage without 
 - Main-document HTTP response status and complete response-header list
 - Basic server and CDN detection using response headers and DNS signatures
 
+## Included in Phase 3
+
+- Evidence-based detection of React, Next.js, Angular, Vue.js, jQuery, and Bootstrap
+- CMS detection for WordPress, Drupal, and Shopify
+- Google Analytics and Google Tag Manager detection
+- Nginx, Apache, Microsoft IIS, Express, and PHP detection when exposed in response headers
+- A Technology Evidence panel that records the observable signal behind every result
+- Resource footprint metrics for loaded resources and their transfer size
+- Security-header snapshot for HTTPS, HSTS, CSP, frame protection, referrer policy, and permissions policy
+- Copy Report action for sharing the current scan as plain text
+
+Production websites can strip framework labels from files or hide their backend behind a CDN. Phase 3 therefore checks both public page resources and runtime markers exposed by the page; a blank Technology Evidence panel means no trustworthy signature was available, not that the website uses no technology.
+
 ## Run it locally
 
 1. Open `chrome://extensions` in Chrome.
@@ -29,6 +42,6 @@ Chrome intentionally prevents the extension from inspecting special pages such a
 
 Phase 2 sends the current hostname to Cloudflare's public DNS-over-HTTPS resolver and the resolved IP address to ipapi.co for organisation and ASN data. Both services are key-free convenience sources; their results can be unavailable, rate-limited, or differ from an authoritative network source.
 
-An IP may belong to a CDN or shared host rather than the website owner. Likewise, server/CDN fingerprints are evidence-based and can be hidden or changed by a proxy. WebScope labels unknown values rather than guessing.
+An IP may belong to a CDN or shared host rather than the website owner. Likewise, all technology, server, and CDN fingerprints are evidence-based and can be hidden, changed, or spoofed by a proxy. A missing result does not prove that a technology is absent, and WebScope does not guess at hidden backend systems or databases.
 
 Visitor estimates, WHOIS/RDAP, geolocation, security assessment, and device-wide CPU/RAM remain out of scope for these phases.
