@@ -2,7 +2,9 @@ const $ = (id) => document.getElementById(id);
 let currentScan = null;
 
 function formatDuration(value) {
-  return Number.isFinite(value) && value > 0 ? `${(value / 1000).toFixed(2)} s` : "Not available";
+  if (!Number.isFinite(value) || value < 0) return "Unavailable";
+  if (value < 1000) return `${Math.round(value)} ms`;
+  return `${(value / 1000).toFixed(2)} s`;
 }
 
 function setText(id, value) { $(id).textContent = value; }
@@ -71,12 +73,54 @@ function renderTechnologies(technologies = []) {
 }
 
 function renderResourceSummary(summary = {}) {
+  const detailedResources = currentScan?.performanceAnalysis?.resources;
   setText("resourceTotal", (summary.total || 0).toLocaleString());
   setText("transferSize", formatBytes(summary.transferSize));
-  setText("resourceScripts", (summary.scripts || 0).toLocaleString());
-  setText("resourceImages", (summary.images || 0).toLocaleString());
-  setText("resourceStylesheets", (summary.stylesheets || 0).toLocaleString());
-  setText("resourceOther", `${summary.fonts || 0} / ${summary.other || 0}`);
+  setText("javascriptSize", formatBytes(detailedResources?.javascript?.transferSize));
+  setText("cssSize", formatBytes(detailedResources?.css?.transferSize));
+  setText("imageSize", formatBytes(detailedResources?.images?.transferSize));
+  setText("fontSize", formatBytes(detailedResources?.fonts?.transferSize));
+  setText(
+    "resourceFootnote",
+    detailedResources?.sizeAvailability
+      ? "Sizes use Resource Timing transfer data; cached and cross-origin resources can be reported as 0 bytes."
+      : "This page did not expose resource-size data. Cached or cross-origin resources commonly omit it."
+  );
+}
+
+function renderPerformance(analysis) {
+  const navigation = analysis?.navigation;
+  const paint = analysis?.paint;
+  setText("performanceStatus", navigation ? "Navigation timing" : "Timing unavailable");
+  setText("dnsTime", formatDuration(navigation?.dns));
+  setText("tcpTime", formatDuration(navigation?.tcp));
+  setText("tlsTime", formatDuration(navigation?.tls));
+  setText("serverResponseTime", formatDuration(navigation?.serverResponse));
+  setText("domProcessingTime", formatDuration(navigation?.domProcessing));
+  setText("domInteractiveTime", formatDuration(navigation?.domInteractive));
+  setText("firstPaintTime", formatDuration(paint?.firstPaint));
+  setText("fcpTime", formatDuration(paint?.firstContentfulPaint));
+}
+
+function renderRuntimeHealth(analysis) {
+  const runtime = analysis?.runtime;
+  const longTasks = runtime?.longTasks;
+  const heap = runtime?.heap;
+  setText("runtimeStatus", longTasks?.supported ? "Runtime signals" : "Long-task API unavailable");
+  setText("jsActivity", runtime?.activity || "Unavailable");
+  setText("responsiveness", runtime?.responsiveness || "Unavailable");
+  setText("longTaskCount", longTasks?.supported ? `${longTasks.count}` : "Unavailable");
+  setText("longTaskDuration", longTasks?.supported ? formatDuration(longTasks.totalDuration) : "Unavailable");
+  setText("longestTask", longTasks?.supported ? formatDuration(longTasks.longestDuration) : "Unavailable");
+  setText("heapUsed", heap?.supported ? formatBytes(heap.used) : "Unavailable");
+  setText("heapLimit", heap?.supported ? formatBytes(heap.limit) : "Unavailable");
+  setText("logicalProcessors", runtime?.hardware?.logicalProcessors ? `${runtime.hardware.logicalProcessors}` : "Unavailable");
+  setText(
+    "runtimeFootnote",
+    heap?.supported
+      ? `JS heap uses ${heap.utilization ?? "?"}% of Chrome's reported heap limit. This is not total device memory.`
+      : "Long tasks estimate page blocking; browsers do not expose trustworthy total device CPU or RAM usage to extensions."
+  );
 }
 
 function renderSecurity(security = []) {
@@ -106,6 +150,10 @@ function buildReport(data) {
   const securityLines = (network.security || []).length
     ? network.security.map((check) => `- ${check.name}: ${check.present ? "Configured" : "Not found"}`).join("\n")
     : "- Unavailable";
+  const performance = data.performanceAnalysis || {};
+  const navigation = performance.navigation || {};
+  const resources = performance.resources || {};
+  const runtime = performance.runtime || {};
 
   return [
     "WebScope scan report",
@@ -120,6 +168,27 @@ function buildReport(data) {
     `- DOM elements: ${data.counts.elements}`,
     `- Page load: ${formatDuration(data.timing.load)}`,
     `- DOM ready: ${formatDuration(data.timing.domReady)}`,
+    "",
+    "Performance",
+    `- DNS lookup: ${formatDuration(navigation.dns)}`,
+    `- TCP connect: ${formatDuration(navigation.tcp)}`,
+    `- TLS handshake: ${formatDuration(navigation.tls)}`,
+    `- Server response: ${formatDuration(navigation.serverResponse)}`,
+    `- First contentful paint: ${formatDuration(performance.paint?.firstContentfulPaint)}`,
+    "",
+    "Resource footprint",
+    `- Total resources: ${data.resourceSummary?.total ?? "Unavailable"}`,
+    `- Total transfer: ${formatBytes(data.resourceSummary?.transferSize)}`,
+    `- JavaScript transfer: ${formatBytes(resources.javascript?.transferSize)}`,
+    `- CSS transfer: ${formatBytes(resources.css?.transferSize)}`,
+    `- Image transfer: ${formatBytes(resources.images?.transferSize)}`,
+    "",
+    "Client runtime health",
+    `- JavaScript activity: ${runtime.activity || "Unavailable"}`,
+    `- Responsiveness: ${runtime.responsiveness || "Unavailable"}`,
+    `- Long tasks: ${runtime.longTasks?.supported ? runtime.longTasks.count : "Unavailable"}`,
+    `- Total long-task time: ${runtime.longTasks?.supported ? formatDuration(runtime.longTasks.totalDuration) : "Unavailable"}`,
+    `- JavaScript heap used: ${runtime.heap?.supported ? formatBytes(runtime.heap.used) : "Unavailable"}`,
     "",
     "Network",
     `- Response: ${response.status || "Unavailable"} ${response.statusText || ""}`.trim(),
@@ -153,7 +222,9 @@ function render(data) {
   setText("domReady", formatDuration(data.timing.domReady));
   setText("browser", data.browser);
   setText("userAgent", data.userAgent);
+  renderPerformance(data.performanceAnalysis);
   renderResourceSummary(data.resourceSummary);
+  renderRuntimeHealth(data.performanceAnalysis);
   renderTechnologies(data.technologies);
   if (data.network) {
     renderNetwork(data.network);

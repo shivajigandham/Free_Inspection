@@ -1,4 +1,4 @@
-# WebScope — Phases 1–3
+# WebScope — Phases 1–5
 
 A Manifest V3 Chrome extension that analyzes the currently open webpage without a backend.
 
@@ -29,6 +29,19 @@ A Manifest V3 Chrome extension that analyzes the currently open webpage without 
 
 Production websites can strip framework labels from files or hide their backend behind a CDN. Phase 3 therefore checks both public page resources and runtime markers exposed by the page; a blank Technology Evidence panel means no trustworthy signature was available, not that the website uses no technology.
 
+## Included in Phase 4
+
+- Navigation timing for DNS lookup, TCP connection, TLS handshake, server response, DOM processing, DOM interactivity, and page load
+- First Paint and First Contentful Paint when the browser exposes those entries
+- Resource transfer breakdown for JavaScript, CSS, images, and fonts
+
+## Included in Phase 5
+
+- Page-side JavaScript activity and responsiveness based on Long Tasks API observations
+- Long-task count, total blocking duration, and longest observed task
+- JavaScript heap figures and logical processor count when Chrome exposes them
+- Explicit measurement boundaries so page-runtime signals are never presented as total device CPU or RAM usage
+
 ## Run it locally
 
 1. Open `chrome://extensions` in Chrome.
@@ -44,4 +57,4 @@ Phase 2 sends the current hostname to Cloudflare's public DNS-over-HTTPS resolve
 
 An IP may belong to a CDN or shared host rather than the website owner. Likewise, all technology, server, and CDN fingerprints are evidence-based and can be hidden, changed, or spoofed by a proxy. A missing result does not prove that a technology is absent, and WebScope does not guess at hidden backend systems or databases.
 
-Visitor estimates, WHOIS/RDAP, geolocation, security assessment, and device-wide CPU/RAM remain out of scope for these phases.
+Visitor estimates, WHOIS/RDAP, geolocation, and full security assessment remain out of scope. Extensions also cannot reliably measure device-wide CPU or RAM use; Phase 5 reports only page-visible JavaScript runtime data when the browser provides it.
