@@ -48,7 +48,20 @@
         </section>
 
         <section class="section performance-section">
-          <h2>Performance</h2>
+          <div class="section-heading">
+            <h2>Performance analysis</h2>
+            <span id="performanceStatus" class="subtle-badge">Navigation timing</span>
+          </div>
+          <dl class="metrics two-column performance-metrics">
+            <div><dt>DNS lookup</dt><dd id="dnsTime" class="compact-value"></dd></div>
+            <div><dt>TCP connect</dt><dd id="tcpTime" class="compact-value"></dd></div>
+            <div><dt>TLS handshake</dt><dd id="tlsTime" class="compact-value"></dd></div>
+            <div><dt>Server response</dt><dd id="serverResponseTime" class="compact-value"></dd></div>
+            <div><dt>DOM processing</dt><dd id="domProcessingTime" class="compact-value"></dd></div>
+            <div><dt>DOM interactive</dt><dd id="domInteractiveTime" class="compact-value"></dd></div>
+            <div><dt>First paint</dt><dd id="firstPaintTime" class="compact-value"></dd></div>
+            <div><dt>First contentful paint</dt><dd id="fcpTime" class="compact-value"></dd></div>
+          </dl>
           <div class="metric-row"><span>Page load</span><strong id="load"></strong></div>
           <div class="metric-row"><span>DOM ready</span><strong id="domReady"></strong></div>
         </section>
@@ -58,12 +71,30 @@
           <dl class="metrics two-column resource-metrics">
             <div><dt>Resources</dt><dd id="resourceTotal"></dd></div>
             <div><dt>Transfer size</dt><dd id="transferSize"></dd></div>
-            <div><dt>Scripts</dt><dd id="resourceScripts"></dd></div>
-            <div><dt>Images</dt><dd id="resourceImages"></dd></div>
-            <div><dt>Stylesheets</dt><dd id="resourceStylesheets"></dd></div>
-            <div><dt>Fonts / other</dt><dd id="resourceOther"></dd></div>
+            <div><dt>JavaScript</dt><dd id="javascriptSize" class="compact-value"></dd></div>
+            <div><dt>CSS</dt><dd id="cssSize" class="compact-value"></dd></div>
+            <div><dt>Images</dt><dd id="imageSize" class="compact-value"></dd></div>
+            <div><dt>Fonts</dt><dd id="fontSize" class="compact-value"></dd></div>
           </dl>
-          <p class="supporting-copy">Transfer size can be lower for cached or cross-origin resources.</p>
+          <p id="resourceFootnote" class="supporting-copy">Transfer size can be lower for cached or cross-origin resources.</p>
+        </section>
+
+        <section class="section runtime-section">
+          <div class="section-heading">
+            <h2>Client runtime health</h2>
+            <span id="runtimeStatus" class="subtle-badge">Passive measurement</span>
+          </div>
+          <dl class="metrics two-column runtime-metrics">
+            <div><dt>JS activity</dt><dd id="jsActivity" class="compact-value"></dd></div>
+            <div><dt>Responsiveness</dt><dd id="responsiveness" class="compact-value"></dd></div>
+            <div><dt>Long tasks</dt><dd id="longTaskCount" class="compact-value"></dd></div>
+            <div><dt>Blocking time</dt><dd id="longTaskDuration" class="compact-value"></dd></div>
+            <div><dt>Longest task</dt><dd id="longestTask" class="compact-value"></dd></div>
+            <div><dt>JS heap used</dt><dd id="heapUsed" class="compact-value"></dd></div>
+            <div><dt>JS heap limit</dt><dd id="heapLimit" class="compact-value"></dd></div>
+            <div><dt>Logical CPUs</dt><dd id="logicalProcessors" class="compact-value"></dd></div>
+          </dl>
+          <p id="runtimeFootnote" class="supporting-copy">These are page-side runtime signals, not total device CPU or RAM measurements.</p>
         </section>
 
         <section class="section technology-section">

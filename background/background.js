@@ -284,13 +284,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
 
-    chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content/technology.js", "content/content.js"] }, () => {
+    chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content/technology.js", "content/performance.js", "content/content.js"] }, () => {
       if (chrome.runtime.lastError) {
         sendResponse({ ok: false, error: chrome.runtime.lastError.message });
         return;
       }
       getMainWorldTechnologies(tab.id, (mainWorldTechnologies) => {
-        chrome.tabs.sendMessage(tab.id, { type: "WEBSCOPE_COLLECT_V3" }, async (page) => {
+        chrome.tabs.sendMessage(tab.id, { type: "WEBSCOPE_COLLECT_V5" }, async (page) => {
           if (chrome.runtime.lastError) {
             sendResponse({ ok: false, error: chrome.runtime.lastError.message });
             return;
