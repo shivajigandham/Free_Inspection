@@ -1,4 +1,4 @@
-# WebScope — Phases 1–5
+# WebScope — Phases 1–7
 
 A Manifest V3 Chrome extension that analyzes the currently open webpage without a backend.
 
@@ -42,6 +42,17 @@ Production websites can strip framework labels from files or hide their backend 
 - JavaScript heap figures and logical processor count when Chrome exposes them
 - Explicit measurement boundaries so page-runtime signals are never presented as total device CPU or RAM usage
 
+## Included in Phase 6
+
+- RDAP lookup for the registered domain, registration date, last changed date, expiration, registrar, and nameservers
+- Domain age calculated from the registration date
+- Clear distinction between domain registration and the first date a website was actually live
+
+## Included in Phase 7
+
+- Approximate country, region, city, timezone, and coordinates for the resolved endpoint IP
+- Endpoint location source and context explaining CDN/hosting-location limitations
+
 ## Run it locally
 
 1. Open `chrome://extensions` in Chrome.
@@ -53,8 +64,8 @@ Chrome intentionally prevents the extension from inspecting special pages such a
 
 ## Important boundaries
 
-Phase 2 sends the current hostname to Cloudflare's public DNS-over-HTTPS resolver and the resolved IP address to ipapi.co for organisation and ASN data. Both services are key-free convenience sources; their results can be unavailable, rate-limited, or differ from an authoritative network source.
+Phase 2 sends the current hostname to Cloudflare's public DNS-over-HTTPS resolver and the resolved IP address to ipapi.co for organisation, ASN, and approximate location data. If ipapi.co is unavailable, Phase 7 tries ipwho.is and IPinfo as fallbacks. Phase 6 sends candidate registered domains to RDAP.org. These convenience sources can be unavailable, rate-limited, incomplete, or differ from authoritative registry data.
 
 An IP may belong to a CDN or shared host rather than the website owner. Likewise, all technology, server, and CDN fingerprints are evidence-based and can be hidden, changed, or spoofed by a proxy. A missing result does not prove that a technology is absent, and WebScope does not guess at hidden backend systems or databases.
 
-Visitor estimates, WHOIS/RDAP, geolocation, and full security assessment remain out of scope. Extensions also cannot reliably measure device-wide CPU or RAM use; Phase 5 reports only page-visible JavaScript runtime data when the browser provides it.
+Visitor estimates and full security assessment remain out of scope. Extensions also cannot reliably measure device-wide CPU or RAM use; Phase 5 reports only page-visible JavaScript runtime data when the browser provides it.
