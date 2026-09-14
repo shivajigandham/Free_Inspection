@@ -7,7 +7,10 @@
   "host_permissions": [
     "<all_urls>",
     "https://cloudflare-dns.com/*",
-    "https://ipapi.co/*"
+    "https://ipapi.co/*",
+    "https://ipinfo.io/*",
+    "https://ipwho.is/*",
+    "https://rdap.org/*"
   ],
   "action": {
     "default_title": "Analyze with WebScope",

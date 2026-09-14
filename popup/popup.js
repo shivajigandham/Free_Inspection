@@ -20,6 +20,24 @@ function displayList(values) {
   return values?.length ? values.join(", ") : "Unavailable";
 }
 
+function formatDate(value) {
+  const date = new Date(value || "");
+  return Number.isNaN(date.getTime()) ? "Unavailable" : date.toISOString().slice(0, 10);
+}
+
+function formatDomainAge(days) {
+  if (!Number.isFinite(days) || days < 0) return "Unavailable";
+  const years = Math.floor(days / 365.25);
+  const remainingDays = Math.floor(days - years * 365.25);
+  return years ? `${years}y ${remainingDays}d` : `${days}d`;
+}
+
+function formatCoordinates(latitude, longitude) {
+  return Number.isFinite(latitude) && Number.isFinite(longitude)
+    ? `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
+    : "Unavailable";
+}
+
 function renderNetwork(network) {
   const responseStatus = $("responseStatus");
   const status = network.response.status;
@@ -47,6 +65,38 @@ function renderNetwork(network) {
     row.append(key, content);
     return row;
   }));
+}
+
+function renderGeolocation(geolocation = {}) {
+  setText("geoStatus", geolocation.available ? geolocation.source || "IP lookup" : "Lookup unavailable");
+  setText("geoCountry", geolocation.country || "Unavailable");
+  setText("geoRegion", geolocation.region || "Unavailable");
+  setText("geoCity", geolocation.city || "Unavailable");
+  setText("geoTimezone", geolocation.timezone || "Unavailable");
+  setText("geoCoordinates", formatCoordinates(geolocation.latitude, geolocation.longitude));
+  setText(
+    "geoFootnote",
+    geolocation.available
+      ? `Approximate ${geolocation.source || "IP"} data for ${geolocation.ip || "the resolved endpoint"}; CDN or hosting locations often differ from the website owner.`
+      : `${geolocation.status || "Location data was unavailable"} for the resolved endpoint.`
+  );
+}
+
+function renderDomain(domain = {}) {
+  setText("domainStatus", domain.available ? domain.source || "RDAP" : "Lookup unavailable");
+  setText("registeredDomain", domain.domain || "Unavailable");
+  setText("registeredOn", formatDate(domain.registeredOn));
+  setText("domainAge", formatDomainAge(domain.ageDays));
+  setText("lastChangedOn", formatDate(domain.lastChangedOn));
+  setText("expiresOn", formatDate(domain.expiresOn));
+  setText("registrar", domain.registrar || "Unavailable");
+  setText("nameservers", displayList(domain.nameservers));
+  setText(
+    "domainFootnote",
+    domain.available
+      ? `RDAP registration data for ${domain.domain}. Registration age is not evidence of when a website first became live.`
+      : domain.status || "No RDAP registration record was available for this hostname."
+  );
 }
 
 function renderTechnologies(technologies = []) {
@@ -154,6 +204,8 @@ function buildReport(data) {
   const navigation = performance.navigation || {};
   const resources = performance.resources || {};
   const runtime = performance.runtime || {};
+  const geolocation = network.geolocation || {};
+  const domain = network.domain || {};
 
   return [
     "WebScope scan report",
@@ -196,6 +248,20 @@ function buildReport(data) {
     `- Server: ${network.server || "Unavailable"}`,
     `- CDN: ${network.cdn?.name || "Unavailable"}`,
     "",
+    "Resolved endpoint location",
+    `- Country: ${geolocation.country || "Unavailable"}`,
+    `- Region / city: ${geolocation.region || "Unavailable"} / ${geolocation.city || "Unavailable"}`,
+    `- Timezone: ${geolocation.timezone || "Unavailable"}`,
+    `- Coordinates: ${formatCoordinates(geolocation.latitude, geolocation.longitude)}`,
+    "",
+    "Domain registration",
+    `- Registered domain: ${domain.domain || "Unavailable"}`,
+    `- Registered: ${formatDate(domain.registeredOn)}`,
+    `- Age: ${formatDomainAge(domain.ageDays)}`,
+    `- Expires: ${formatDate(domain.expiresOn)}`,
+    `- Registrar: ${domain.registrar || "Unavailable"}`,
+    `- Nameservers: ${displayList(domain.nameservers)}`,
+    "",
     "Technology evidence",
     technologyLines,
     "",
@@ -228,8 +294,12 @@ function render(data) {
   renderTechnologies(data.technologies);
   if (data.network) {
     renderNetwork(data.network);
+    renderGeolocation(data.network.geolocation);
+    renderDomain(data.network.domain);
     renderSecurity(data.network.security);
   } else {
+    renderGeolocation();
+    renderDomain();
     renderSecurity();
   }
   $("copyReport").disabled = false;
