@@ -122,6 +122,38 @@
           <p id="cdnEvidence" class="supporting-copy"></p>
         </section>
 
+        <section class="section geolocation-section">
+          <div class="section-heading">
+            <h2>Resolved endpoint location</h2>
+            <span id="geoStatus" class="subtle-badge">IP lookup</span>
+          </div>
+          <dl class="metrics two-column">
+            <div><dt>Country</dt><dd id="geoCountry" class="compact-value"></dd></div>
+            <div><dt>Region</dt><dd id="geoRegion" class="compact-value"></dd></div>
+            <div><dt>City</dt><dd id="geoCity" class="compact-value"></dd></div>
+            <div><dt>Timezone</dt><dd id="geoTimezone" class="compact-value"></dd></div>
+            <div class="span-two"><dt>Coordinates</dt><dd id="geoCoordinates" class="compact-value"></dd></div>
+          </dl>
+          <p id="geoFootnote" class="supporting-copy">Location is approximate and describes the resolved endpoint, not the site owner or visitor.</p>
+        </section>
+
+        <section class="section domain-section">
+          <div class="section-heading">
+            <h2>Domain registration</h2>
+            <span id="domainStatus" class="subtle-badge">RDAP</span>
+          </div>
+          <dl class="metrics two-column">
+            <div class="span-two"><dt>Registered domain</dt><dd id="registeredDomain" class="compact-value"></dd></div>
+            <div><dt>Registered</dt><dd id="registeredOn" class="compact-value"></dd></div>
+            <div><dt>Domain age</dt><dd id="domainAge" class="compact-value"></dd></div>
+            <div><dt>Last changed</dt><dd id="lastChangedOn" class="compact-value"></dd></div>
+            <div><dt>Expires</dt><dd id="expiresOn" class="compact-value"></dd></div>
+            <div class="span-two"><dt>Registrar</dt><dd id="registrar" class="compact-value"></dd></div>
+            <div class="span-two"><dt>Nameservers</dt><dd id="nameservers" class="compact-value"></dd></div>
+          </dl>
+          <p id="domainFootnote" class="supporting-copy">Domain registration is not evidence of the first date a website was live.</p>
+        </section>
+
         <section class="section dns-section">
           <h2>DNS records</h2>
           <dl class="dns-list">
