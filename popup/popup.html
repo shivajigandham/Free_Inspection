@@ -122,6 +122,84 @@
           <p id="cdnEvidence" class="supporting-copy"></p>
         </section>
 
+        <section class="section geolocation-section">
+          <div class="section-heading">
+            <h2>Resolved endpoint location</h2>
+            <span id="geoStatus" class="subtle-badge">IP lookup</span>
+          </div>
+          <dl class="metrics two-column">
+            <div><dt>Country</dt><dd id="geoCountry" class="compact-value"></dd></div>
+            <div><dt>Region</dt><dd id="geoRegion" class="compact-value"></dd></div>
+            <div><dt>City</dt><dd id="geoCity" class="compact-value"></dd></div>
+            <div><dt>Timezone</dt><dd id="geoTimezone" class="compact-value"></dd></div>
+            <div class="span-two"><dt>Coordinates</dt><dd id="geoCoordinates" class="compact-value"></dd></div>
+          </dl>
+          <p id="geoFootnote" class="supporting-copy">Location is approximate and describes the resolved endpoint, not the site owner or visitor.</p>
+        </section>
+
+        <section class="section domain-section">
+          <div class="section-heading">
+            <h2>Domain registration</h2>
+            <span id="domainStatus" class="subtle-badge">RDAP</span>
+          </div>
+          <dl class="metrics two-column">
+            <div class="span-two"><dt>Registered domain</dt><dd id="registeredDomain" class="compact-value"></dd></div>
+            <div><dt>Registered</dt><dd id="registeredOn" class="compact-value"></dd></div>
+            <div><dt>Domain age</dt><dd id="domainAge" class="compact-value"></dd></div>
+            <div><dt>Last changed</dt><dd id="lastChangedOn" class="compact-value"></dd></div>
+            <div><dt>Expires</dt><dd id="expiresOn" class="compact-value"></dd></div>
+            <div class="span-two"><dt>Registrar</dt><dd id="registrar" class="compact-value"></dd></div>
+            <div class="span-two"><dt>Nameservers</dt><dd id="nameservers" class="compact-value"></dd></div>
+          </dl>
+          <p id="domainFootnote" class="supporting-copy">Domain registration is not evidence of the first date a website was live.</p>
+        </section>
+
+        <section class="section traffic-section">
+          <div class="section-heading">
+            <h2>Traffic intelligence</h2>
+            <span id="trafficStatus" class="subtle-badge">Provider required</span>
+          </div>
+          <dl class="metrics two-column">
+            <div><dt>Monthly visits</dt><dd id="trafficVisits" class="compact-value"></dd></div>
+            <div><dt>Global rank</dt><dd id="trafficRank" class="compact-value"></dd></div>
+            <div><dt>Provider</dt><dd id="trafficProvider" class="compact-value"></dd></div>
+            <div><dt>Updated</dt><dd id="trafficUpdated" class="compact-value"></dd></div>
+          </dl>
+          <div class="traffic-breakdown">
+            <div>
+              <h3>Top countries</h3>
+              <ul id="trafficCountries" class="traffic-list"></ul>
+            </div>
+            <div>
+              <h3>Traffic sources</h3>
+              <ul id="trafficChannels" class="traffic-list"></ul>
+            </div>
+          </div>
+          <details class="traffic-entry">
+            <summary>Import traffic estimate</summary>
+            <form id="trafficForm">
+              <label>Provider <input id="trafficProviderInput" maxlength="80" placeholder="e.g. Similarweb" required /></label>
+              <label>Estimated monthly visits <input id="trafficVisitsInput" type="number" min="0" step="1" placeholder="e.g. 2400000" /></label>
+              <label>Global rank <input id="trafficRankInput" type="number" min="1" step="1" placeholder="e.g. 12430" /></label>
+              <label>Confidence
+                <select id="trafficConfidenceInput">
+                  <option value="Not provided">Not provided</option>
+                  <option value="Low">Low</option>
+                  <option value="Medium">Medium</option>
+                  <option value="High">High</option>
+                </select>
+              </label>
+              <label>Top countries <textarea id="trafficCountriesInput" rows="2" placeholder="India: 42%&#10;USA: 21%"></textarea></label>
+              <label>Traffic sources <textarea id="trafficChannelsInput" rows="2" placeholder="Search: 48%&#10;Direct: 31%"></textarea></label>
+              <div class="traffic-actions">
+                <button type="submit" class="traffic-button">Save estimate</button>
+                <button id="clearTraffic" type="button" class="traffic-button is-secondary">Clear</button>
+              </div>
+            </form>
+          </details>
+          <p id="trafficFootnote" class="supporting-copy">Traffic figures must come from an external provider and are estimates, not live visitor counts.</p>
+        </section>
+
         <section class="section dns-section">
           <h2>DNS records</h2>
           <dl class="dns-list">
@@ -145,11 +223,17 @@
 
         <section class="section security-section">
           <div class="section-heading">
-            <h2>Security snapshot</h2>
+            <h2>Security analysis</h2>
             <span id="securityCount" class="subtle-badge"></span>
           </div>
+          <dl class="metrics two-column">
+            <div><dt>Secure signals</dt><dd id="securityPasses" class="compact-value"></dd></div>
+            <div><dt>Needs review</dt><dd id="securityReviews" class="compact-value"></dd></div>
+            <div><dt>Missing headers</dt><dd id="securityMissing" class="compact-value"></dd></div>
+            <div><dt>Response cookies</dt><dd id="securityCookies" class="compact-value"></dd></div>
+          </dl>
           <div id="securityList" class="security-list"></div>
-          <p class="supporting-copy">These are configuration signals, not a vulnerability assessment.</p>
+          <p id="securityFootnote" class="supporting-copy">These are evidence-based configuration signals, not a vulnerability assessment.</p>
         </section>
 
         <section class="section browser-section">

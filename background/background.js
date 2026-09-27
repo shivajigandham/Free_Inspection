@@ -27,9 +27,9 @@ function unavailable(value) {
   return value || "Unavailable";
 }
 
-async function fetchWithTimeout(url, options = {}) {
+async function fetchWithTimeout(url, options = {}, timeoutMs = REQUEST_TIMEOUT) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } finally {
@@ -81,19 +81,209 @@ async function getDns(hostname) {
   return { a, aaaa, cname };
 }
 
-async function getProvider(ip) {
-  if (!ip) return { isp: "Unavailable", asn: "Unavailable" };
-  try {
-    const response = await fetchWithTimeout(`https://ipapi.co/${encodeURIComponent(ip)}/json/`, { cache: "no-store" });
-    if (!response.ok) throw new Error("Provider lookup failed");
-    const data = await response.json();
-    return {
+function unavailableIpIntelligence(ip, status) {
+  return {
+    provider: { isp: "Unavailable", asn: "Unavailable" },
+    geolocation: { available: false, source: "IP geolocation", ip, status }
+  };
+}
+
+function isNumber(value) {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function ipapiRecord(data, ip) {
+  if (data.error) throw new Error(data.reason || "ipapi.co returned an error");
+  return {
+    provider: {
       isp: unavailable(data.org || data.network),
       asn: unavailable(data.asn)
-    };
-  } catch {
-    return { isp: "Unavailable", asn: "Unavailable" };
+    },
+    geolocation: {
+      available: Boolean(data.country_name || data.city || data.timezone),
+      source: "ipapi.co",
+      ip,
+      status: "Lookup completed",
+      country: unavailable(data.country_name),
+      countryCode: unavailable(data.country_code),
+      region: unavailable(data.region),
+      city: unavailable(data.city),
+      timezone: unavailable(data.timezone),
+      latitude: isNumber(data.latitude) ? data.latitude : null,
+      longitude: isNumber(data.longitude) ? data.longitude : null
+    }
+  };
+}
+
+function ipWhoIsRecord(data, ip) {
+  if (data.success === false) throw new Error(data.message || "ipwho.is returned an error");
+  return {
+    provider: {
+      isp: unavailable(data.connection?.isp || data.connection?.org),
+      asn: unavailable(data.connection?.asn ? `AS${data.connection.asn}` : "")
+    },
+    geolocation: {
+      available: Boolean(data.country || data.city || data.timezone?.id),
+      source: "ipwho.is fallback",
+      ip,
+      status: "Lookup completed using fallback",
+      country: unavailable(data.country),
+      countryCode: unavailable(data.country_code),
+      region: unavailable(data.region),
+      city: unavailable(data.city),
+      timezone: unavailable(data.timezone?.id || data.timezone),
+      latitude: isNumber(data.latitude) ? data.latitude : null,
+      longitude: isNumber(data.longitude) ? data.longitude : null
+    }
+  };
+}
+
+function ipInfoRecord(data, ip) {
+  if (data.bogon || data.error) throw new Error(data.error?.title || "IPinfo returned an error");
+  const coordinateParts = typeof data.loc === "string" ? data.loc.split(",") : [];
+  const latitude = coordinateParts.length === 2 ? Number(coordinateParts[0]) : null;
+  const longitude = coordinateParts.length === 2 ? Number(coordinateParts[1]) : null;
+  const asn = String(data.org || "").match(/^AS\d+/i)?.[0] || "";
+  return {
+    provider: {
+      isp: unavailable(data.org),
+      asn: unavailable(asn)
+    },
+    geolocation: {
+      available: Boolean(data.country || data.city || data.timezone),
+      source: "IPinfo fallback",
+      ip,
+      status: "Lookup completed using fallback",
+      country: unavailable(data.country),
+      countryCode: unavailable(data.country),
+      region: unavailable(data.region),
+      city: unavailable(data.city),
+      timezone: unavailable(data.timezone),
+      latitude: isNumber(latitude) ? latitude : null,
+      longitude: isNumber(longitude) ? longitude : null
+    }
+  };
+}
+
+async function getIpIntelligence(ip) {
+  if (!ip) return unavailableIpIntelligence(ip, "No resolved IP address");
+
+  try {
+    const response = await fetchWithTimeout(`https://ipapi.co/${encodeURIComponent(ip)}/json/`, { cache: "no-store" }, 3500);
+    if (!response.ok) throw new Error(`ipapi.co returned HTTP ${response.status}`);
+    return ipapiRecord(await response.json(), ip);
+  } catch (primaryError) {
+    try {
+      const response = await fetchWithTimeout(`https://ipwho.is/${encodeURIComponent(ip)}`, { cache: "no-store" }, 3500);
+      if (!response.ok) throw new Error(`ipwho.is returned HTTP ${response.status}`);
+      return ipWhoIsRecord(await response.json(), ip);
+    } catch (fallbackError) {
+      try {
+        const response = await fetchWithTimeout(`https://ipinfo.io/${encodeURIComponent(ip)}/json`, { cache: "no-store" }, 3500);
+        if (!response.ok) throw new Error(`IPinfo returned HTTP ${response.status}`);
+        return ipInfoRecord(await response.json(), ip);
+      } catch (thirdError) {
+        return unavailableIpIntelligence(ip, "All IP location providers were unavailable");
+      }
+    }
   }
+}
+
+function getDomainCandidates(hostname) {
+  const labels = hostname.toLowerCase().replace(/\.$/, "").split(".").filter(Boolean);
+  if (labels.length < 2) return [];
+  return labels.slice(0, -1).map((_, index) => labels.slice(index).join("."));
+}
+
+function isIpLiteral(hostname) {
+  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname) || hostname.includes(":");
+}
+
+function getEventDate(events, actions) {
+  const event = (events || []).find((item) => actions.includes(String(item.eventAction || "").toLowerCase()));
+  return event?.eventDate || null;
+}
+
+function getVcardValue(entity, property) {
+  const fields = entity?.vcardArray?.[1] || [];
+  const field = fields.find((entry) => String(entry?.[0] || "").toLowerCase() === property);
+  return typeof field?.[3] === "string" ? field[3] : "";
+}
+
+function getRegistrar(entities) {
+  const registrar = (entities || []).find((entity) => (entity.roles || []).some((role) => String(role).toLowerCase() === "registrar"));
+  return unavailable(getVcardValue(registrar, "fn") || registrar?.handle);
+}
+
+function getDomainAgeDays(registeredOn) {
+  const timestamp = Date.parse(registeredOn || "");
+  if (!Number.isFinite(timestamp) || timestamp > Date.now()) return null;
+  return Math.floor((Date.now() - timestamp) / 86_400_000);
+}
+
+function toDomainRecord(data, fallbackDomain) {
+  const registeredOn = getEventDate(data.events, ["registration"]);
+  return {
+    available: true,
+    source: "RDAP",
+    status: "RDAP record found",
+    domain: data.ldhName || data.unicodeName || fallbackDomain,
+    registeredOn,
+    lastChangedOn: getEventDate(data.events, ["last changed", "last update", "changed"]),
+    expiresOn: getEventDate(data.events, ["expiration", "expiry"]),
+    ageDays: getDomainAgeDays(registeredOn),
+    registrar: getRegistrar(data.entities),
+    nameservers: (data.nameservers || [])
+      .map((nameserver) => nameserver.ldhName || nameserver.unicodeName)
+      .filter(Boolean)
+  };
+}
+
+async function getDomainRecord(hostname) {
+  if (isIpLiteral(hostname)) {
+    return {
+      available: false,
+      source: "RDAP",
+      status: "An IP address has no domain registration record",
+      domain: "Unavailable",
+      registeredOn: null,
+      lastChangedOn: null,
+      expiresOn: null,
+      ageDays: null,
+      registrar: "Unavailable",
+      nameservers: []
+    };
+  }
+
+  let lastStatus = "No RDAP record found";
+  for (const candidate of getDomainCandidates(hostname)) {
+    try {
+      const response = await fetchWithTimeout(
+        `https://rdap.org/domain/${encodeURIComponent(candidate)}`,
+        { headers: { Accept: "application/rdap+json, application/json" }, cache: "no-store" }
+      );
+      if (!response.ok) {
+        lastStatus = `RDAP returned HTTP ${response.status}`;
+        continue;
+      }
+      return toDomainRecord(await response.json(), candidate);
+    } catch {
+      lastStatus = "RDAP lookup did not respond";
+    }
+  }
+
+  return {
+    available: false,
+    source: "RDAP",
+    status: lastStatus,
+    domain: "Unavailable",
+    registeredOn: null,
+    lastChangedOn: null,
+    expiresOn: null,
+    ageDays: null,
+    registrar: "Unavailable",
+    nameservers: []
+  };
 }
 
 function detectCdn(headers, cname) {
@@ -135,17 +325,201 @@ function detectHeaderTechnologies(headers) {
   return findings;
 }
 
-function getSecuritySnapshot(url, headers) {
+function headerValues(headers, name) {
+  return headers
+    .filter((header) => header.name.toLowerCase() === name.toLowerCase())
+    .map((header) => header.value)
+    .filter(Boolean);
+}
+
+function securityCheck(name, state, evidence) {
+  return { name, state, present: state === "pass", evidence };
+}
+
+function getHstsMaxAge(value) {
+  const match = value.match(/max-age\s*=\s*(\d+)/i);
+  return match ? Number(match[1]) : null;
+}
+
+function analyzeResponseCookies(headers) {
+  const cookies = headerValues(headers, "set-cookie").map((value) => {
+    const parts = value.split(";").map((part) => part.trim()).filter(Boolean);
+    const attributes = parts.slice(1).map((part) => part.toLowerCase());
+    const sameSite = attributes
+      .find((attribute) => attribute.startsWith("samesite="))
+      ?.split("=")[1] || "";
+    return {
+      secure: attributes.includes("secure"),
+      httpOnly: attributes.includes("httponly"),
+      sameSite
+    };
+  });
+
+  return {
+    observed: cookies.length > 0,
+    total: cookies.length,
+    secure: cookies.filter((cookie) => cookie.secure).length,
+    httpOnly: cookies.filter((cookie) => cookie.httpOnly).length,
+    sameSite: cookies.filter((cookie) => cookie.sameSite).length,
+    withoutSecure: cookies.filter((cookie) => !cookie.secure).length,
+    withoutHttpOnly: cookies.filter((cookie) => !cookie.httpOnly).length,
+    withoutSameSite: cookies.filter((cookie) => !cookie.sameSite).length,
+    noneWithoutSecure: cookies.filter((cookie) => cookie.sameSite === "none" && !cookie.secure).length
+  };
+}
+
+function getSecurityAnalysis(url, headers, pageSignals = {}) {
   const secure = new URL(url).protocol === "https:";
+  const hsts = headerValue(headers, "strict-transport-security");
+  const hstsMaxAge = getHstsMaxAge(hsts);
+  const cspHeader = headerValue(headers, "content-security-policy");
+  const csp = cspHeader || pageSignals.metaCsp || "";
+  const xfo = headerValue(headers, "x-frame-options");
+  const referrer = headerValue(headers, "referrer-policy");
+  const metaReferrer = pageSignals.metaReferrer || "";
+  const permissions = headerValue(headers, "permissions-policy");
+  const xContentTypeOptions = headerValue(headers, "x-content-type-options");
+  const coop = headerValue(headers, "cross-origin-opener-policy");
+  const corp = headerValue(headers, "cross-origin-resource-policy");
+  const allowOrigin = headerValue(headers, "access-control-allow-origin");
+  const allowCredentials = headerValue(headers, "access-control-allow-credentials");
+  const cookies = analyzeResponseCookies(headers);
+  const strongReferrerPolicies = /^(no-referrer|same-origin|strict-origin|strict-origin-when-cross-origin)$/i;
   const checks = [
-    ["HTTPS", secure, secure ? "The page is served over HTTPS" : "The page is not served over HTTPS"],
-    ["HSTS", Boolean(headerValue(headers, "strict-transport-security")), "Strict-Transport-Security response header"],
-    ["CSP", Boolean(headerValue(headers, "content-security-policy")), "Content-Security-Policy response header"],
-    ["Frame protection", Boolean(headerValue(headers, "x-frame-options") || headerValue(headers, "content-security-policy").includes("frame-ancestors")), "X-Frame-Options or CSP frame-ancestors"],
-    ["Referrer policy", Boolean(headerValue(headers, "referrer-policy")), "Referrer-Policy response header"],
-    ["Permissions policy", Boolean(headerValue(headers, "permissions-policy")), "Permissions-Policy response header"]
+    securityCheck(
+      "HTTPS",
+      secure ? "pass" : "missing",
+      secure ? "The main document is served over HTTPS." : "The main document is served over HTTP."
+    ),
+    securityCheck(
+      "HSTS",
+      !secure ? "info" : !hsts ? "missing" : hstsMaxAge !== null && hstsMaxAge >= 15_552_000 ? "pass" : "review",
+      !secure
+        ? "HSTS is only meaningful on HTTPS responses."
+        : !hsts
+          ? "No Strict-Transport-Security response header was observed."
+          : hstsMaxAge !== null && hstsMaxAge >= 15_552_000
+            ? "Strict-Transport-Security is present with a long max-age."
+            : "Strict-Transport-Security is present, but its max-age should be reviewed."
+    ),
+    securityCheck(
+      "Content Security Policy",
+      csp ? "pass" : "missing",
+      cspHeader
+        ? "Content-Security-Policy response header is present."
+        : pageSignals.metaCsp
+          ? "A CSP meta tag is present; response-header coverage may differ."
+          : "No Content-Security-Policy header or meta tag was observed."
+    ),
+    securityCheck(
+      "Frame protection",
+      xfo || /\bframe-ancestors\b/i.test(cspHeader) ? "pass" : "missing",
+      xfo
+        ? "X-Frame-Options response header is present."
+        : /\bframe-ancestors\b/i.test(cspHeader)
+          ? "CSP frame-ancestors directive is present in the response header."
+          : "No X-Frame-Options or response-header frame-ancestors directive was observed."
+    ),
+    securityCheck(
+      "MIME type protection",
+      /nosniff/i.test(xContentTypeOptions) ? "pass" : xContentTypeOptions ? "review" : "missing",
+      xContentTypeOptions
+        ? "X-Content-Type-Options: " + xContentTypeOptions
+        : "No X-Content-Type-Options: nosniff header was observed."
+    ),
+    securityCheck(
+      "Referrer policy",
+      referrer && strongReferrerPolicies.test(referrer) ? "pass" : referrer || metaReferrer ? "review" : "missing",
+      referrer
+        ? "Referrer-Policy: " + referrer
+        : metaReferrer
+          ? "A page meta referrer policy is present: " + metaReferrer
+          : "No Referrer-Policy response header or page meta policy was observed."
+    ),
+    securityCheck(
+      "Permissions policy",
+      permissions ? "pass" : "missing",
+      permissions ? "Permissions-Policy response header is present." : "No Permissions-Policy response header was observed."
+    ),
+    securityCheck(
+      "Cross-origin isolation",
+      coop && corp ? "pass" : coop || corp ? "review" : "info",
+      coop && corp
+        ? "Cross-Origin-Opener-Policy and Cross-Origin-Resource-Policy are both present."
+        : coop || corp
+          ? "One cross-origin isolation header is present; coverage depends on the application's needs."
+          : "No cross-origin isolation headers were observed; they are not required for every site."
+    ),
+    securityCheck(
+      "CORS response policy",
+      allowOrigin === "*" && /true/i.test(allowCredentials) ? "review" : "info",
+      !allowOrigin
+        ? "No Access-Control-Allow-Origin response header was observed on the main document."
+        : allowOrigin === "*" && /true/i.test(allowCredentials)
+          ? "Wildcard Access-Control-Allow-Origin was returned together with credential support; review the response configuration."
+          : "Access-Control-Allow-Origin: " + allowOrigin + ". CORS posture depends on the request context."
+    ),
+    securityCheck(
+      "Mixed-content signals",
+      !secure ? "info" : pageSignals.insecureResourceCount ? "review" : "pass",
+      !secure
+        ? "Mixed-content checks apply to HTTPS pages."
+        : pageSignals.insecureResourceCount
+          ? String(pageSignals.insecureResourceCount) + " HTTP resource reference(s) were found in the page."
+          : "No HTTP resource references were found in the inspected page markup."
+    ),
+    securityCheck(
+      "Password form transport",
+      pageSignals.insecurePasswordFormCount ? "review" : pageSignals.passwordFormCount ? "pass" : "info",
+      pageSignals.insecurePasswordFormCount
+        ? String(pageSignals.insecurePasswordFormCount) + " password form(s) submit to HTTP."
+        : pageSignals.passwordFormCount
+          ? "Password form actions resolve to HTTPS."
+          : "No password form was found on the inspected page."
+    ),
+    securityCheck(
+      "Cookie transport",
+      !cookies.total ? "info" : cookies.withoutSecure ? "review" : "pass",
+      !cookies.total
+        ? "No Set-Cookie response headers were observed on the main document."
+        : cookies.withoutSecure
+          ? String(cookies.withoutSecure) + " of " + String(cookies.total) + " observed cookie(s) omitted Secure."
+          : "All observed cookies include Secure."
+    ),
+    securityCheck(
+      "Cookie script access",
+      !cookies.total ? "info" : cookies.withoutHttpOnly ? "review" : "pass",
+      !cookies.total
+        ? "No Set-Cookie response headers were observed on the main document."
+        : cookies.withoutHttpOnly
+          ? String(cookies.withoutHttpOnly) + " of " + String(cookies.total) + " observed cookie(s) omitted HttpOnly."
+          : "All observed cookies include HttpOnly."
+    ),
+    securityCheck(
+      "Cookie SameSite",
+      !cookies.total ? "info" : cookies.noneWithoutSecure || cookies.withoutSameSite ? "review" : "pass",
+      !cookies.total
+        ? "No Set-Cookie response headers were observed on the main document."
+        : cookies.noneWithoutSecure
+          ? "A SameSite=None cookie without Secure was observed."
+          : cookies.withoutSameSite
+            ? String(cookies.withoutSameSite) + " of " + String(cookies.total) + " observed cookie(s) omitted SameSite."
+            : "All observed cookies specify SameSite."
+    ),
+    securityCheck(
+      "TLS certificate details",
+      "info",
+      "Chrome validates the connection, but this extension does not receive certificate issuer, chain, or TLS-version details."
+    )
   ];
-  return checks.map(([name, present, evidence]) => ({ name, present, evidence }));
+  const summary = {
+    pass: checks.filter((check) => check.state === "pass").length,
+    review: checks.filter((check) => check.state === "review").length,
+    missing: checks.filter((check) => check.state === "missing").length,
+    info: checks.filter((check) => check.state === "info").length
+  };
+
+  return { checks, cookies, summary };
 }
 
 function mergeTechnologies(...groups) {
@@ -250,17 +624,20 @@ function getMainWorldTechnologies(tabId, callback) {
   );
 }
 
-async function scanNetwork(tab) {
+async function scanNetwork(tab, pageSignals) {
   const hostname = new URL(tab.url).hostname;
-  const [response, dns] = await Promise.all([getCapturedHeaders(tab), getDns(hostname)]);
-  const provider = await getProvider(dns.a[0] || dns.aaaa[0]);
+  const [response, dns, domain] = await Promise.all([getCapturedHeaders(tab), getDns(hostname), getDomainRecord(hostname)]);
+  const endpointIp = dns.a[0] || dns.aaaa[0];
+  const intelligence = await getIpIntelligence(endpointIp);
   const server = headerValue(response.headers, "server");
 
   return {
     ipv4: dns.a[0] || "Unavailable",
     ipv6: dns.aaaa[0] || "Unavailable",
     dns,
-    provider,
+    provider: intelligence.provider,
+    geolocation: intelligence.geolocation,
+    domain,
     server: unavailable(server),
     cdn: detectCdn(response.headers, dns.cname),
     response: {
@@ -271,7 +648,7 @@ async function scanNetwork(tab) {
       headers: response.headers.sort((a, b) => a.name.localeCompare(b.name))
     },
     technologies: detectHeaderTechnologies(response.headers),
-    security: getSecuritySnapshot(response.url, response.headers)
+    security: getSecurityAnalysis(response.url, response.headers, pageSignals)
   };
 }
 
@@ -296,7 +673,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             return;
           }
           try {
-            const network = await scanNetwork(tab);
+            const network = await scanNetwork(tab, page.securitySignals);
             sendResponse({
               ok: true,
               data: {
