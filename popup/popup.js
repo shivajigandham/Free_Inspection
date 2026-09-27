@@ -20,6 +20,109 @@ function displayList(values) {
   return values?.length ? values.join(", ") : "Unavailable";
 }
 
+function formatDate(value) {
+  const date = new Date(value || "");
+  return Number.isNaN(date.getTime()) ? "Unavailable" : date.toISOString().slice(0, 10);
+}
+
+function formatDomainAge(days) {
+  if (!Number.isFinite(days) || days < 0) return "Unavailable";
+  const years = Math.floor(days / 365.25);
+  const remainingDays = Math.floor(days - years * 365.25);
+  return years ? `${years}y ${remainingDays}d` : `${days}d`;
+}
+
+function formatCoordinates(latitude, longitude) {
+  return Number.isFinite(latitude) && Number.isFinite(longitude)
+    ? `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
+    : "Unavailable";
+}
+
+function formatNumber(value) {
+  return Number.isFinite(value) && value >= 0 ? value.toLocaleString() : "Unavailable";
+}
+
+function trafficDomain(scan = currentScan) {
+  const registeredDomain = scan?.network?.domain?.domain;
+  if (registeredDomain && registeredDomain !== "Unavailable") return registeredDomain.toLowerCase();
+  return scan?.domain?.toLowerCase().replace(/^www\./, "") || "";
+}
+
+function trafficStorageKey(scan = currentScan) {
+  const domain = trafficDomain(scan);
+  return domain ? "webscope:traffic:" + domain : "";
+}
+
+function parseTrafficBreakdown(value) {
+  return String(value || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const separator = line.indexOf(":");
+      return separator > 0
+        ? { label: line.slice(0, separator).trim(), value: line.slice(separator + 1).trim() }
+        : { label: line, value: "" };
+    })
+    .filter((item) => item.label)
+    .slice(0, 6);
+}
+
+function formatTrafficBreakdown(items = []) {
+  return items.map((item) => item.value ? item.label + ": " + item.value : item.label).join("\n");
+}
+
+function renderTrafficList(id, items = []) {
+  const list = $(id);
+  list.replaceChildren(...(items.length ? items : [{ label: "Not provided", value: "" }]).map((item) => {
+    const row = document.createElement("li");
+    const label = document.createElement("span");
+    const value = document.createElement("span");
+    label.textContent = item.label;
+    value.textContent = item.value;
+    row.append(label, value);
+    return row;
+  }));
+}
+
+function renderTraffic(traffic) {
+  const available = Boolean(traffic?.provider);
+  setText("trafficStatus", available ? "Imported estimate" : "Provider required");
+  setText("trafficVisits", formatNumber(traffic?.monthlyVisits));
+  setText("trafficRank", Number.isFinite(traffic?.globalRank) ? "#" + traffic.globalRank.toLocaleString() : "Unavailable");
+  setText("trafficProvider", traffic?.provider || "Not configured");
+  setText("trafficUpdated", formatDate(traffic?.updatedAt));
+  renderTrafficList("trafficCountries", traffic?.countries);
+  renderTrafficList("trafficChannels", traffic?.channels);
+  setText(
+    "trafficFootnote",
+    available
+      ? "Estimate imported from " + traffic.provider + " (" + (traffic.confidence || "confidence not provided") + ") on " + formatDate(traffic.updatedAt) + ". It is not a live visitor count."
+      : "Traffic figures require an external provider. Import an estimate to store it locally for this domain."
+  );
+}
+
+async function loadTraffic(scan) {
+  const key = trafficStorageKey(scan);
+  if (!key) {
+    renderTraffic(null);
+    return;
+  }
+  const stored = await chrome.storage.local.get(key);
+  if (currentScan !== scan) return;
+  scan.traffic = stored[key] || null;
+  renderTraffic(scan.traffic);
+}
+
+function fillTrafficForm(traffic = currentScan?.traffic) {
+  $("trafficProviderInput").value = traffic?.provider || "";
+  $("trafficVisitsInput").value = Number.isFinite(traffic?.monthlyVisits) ? traffic.monthlyVisits : "";
+  $("trafficRankInput").value = Number.isFinite(traffic?.globalRank) ? traffic.globalRank : "";
+  $("trafficConfidenceInput").value = traffic?.confidence || "Not provided";
+  $("trafficCountriesInput").value = formatTrafficBreakdown(traffic?.countries || []);
+  $("trafficChannelsInput").value = formatTrafficBreakdown(traffic?.channels || []);
+}
+
 function renderNetwork(network) {
   const responseStatus = $("responseStatus");
   const status = network.response.status;
@@ -47,6 +150,38 @@ function renderNetwork(network) {
     row.append(key, content);
     return row;
   }));
+}
+
+function renderGeolocation(geolocation = {}) {
+  setText("geoStatus", geolocation.available ? geolocation.source || "IP lookup" : "Lookup unavailable");
+  setText("geoCountry", geolocation.country || "Unavailable");
+  setText("geoRegion", geolocation.region || "Unavailable");
+  setText("geoCity", geolocation.city || "Unavailable");
+  setText("geoTimezone", geolocation.timezone || "Unavailable");
+  setText("geoCoordinates", formatCoordinates(geolocation.latitude, geolocation.longitude));
+  setText(
+    "geoFootnote",
+    geolocation.available
+      ? `Approximate ${geolocation.source || "IP"} data for ${geolocation.ip || "the resolved endpoint"}; CDN or hosting locations often differ from the website owner.`
+      : `${geolocation.status || "Location data was unavailable"} for the resolved endpoint.`
+  );
+}
+
+function renderDomain(domain = {}) {
+  setText("domainStatus", domain.available ? domain.source || "RDAP" : "Lookup unavailable");
+  setText("registeredDomain", domain.domain || "Unavailable");
+  setText("registeredOn", formatDate(domain.registeredOn));
+  setText("domainAge", formatDomainAge(domain.ageDays));
+  setText("lastChangedOn", formatDate(domain.lastChangedOn));
+  setText("expiresOn", formatDate(domain.expiresOn));
+  setText("registrar", domain.registrar || "Unavailable");
+  setText("nameservers", displayList(domain.nameservers));
+  setText(
+    "domainFootnote",
+    domain.available
+      ? `RDAP registration data for ${domain.domain}. Registration age is not evidence of when a website first became live.`
+      : domain.status || "No RDAP registration record was available for this hostname."
+  );
 }
 
 function renderTechnologies(technologies = []) {
@@ -123,6 +258,47 @@ function renderRuntimeHealth(analysis) {
   );
 }
 
+function renderSecurityAnalysis(security = {}) {
+  const checks = Array.isArray(security) ? security : security.checks || [];
+  const summary = security.summary || {
+    pass: checks.filter((check) => check.state === "pass" || check.present).length,
+    review: checks.filter((check) => check.state === "review").length,
+    missing: checks.filter((check) => check.state === "missing" || (!check.present && !check.state)).length
+  };
+  const cookies = security.cookies || {};
+  const labels = { pass: "Good", review: "Review", missing: "Missing", info: "Info" };
+  setText("securityCount", checks.length ? summary.pass + " good / " + summary.review + " review" : "Unavailable");
+  setText("securityPasses", Number.isFinite(summary.pass) ? String(summary.pass) : "Unavailable");
+  setText("securityReviews", Number.isFinite(summary.review) ? String(summary.review) : "Unavailable");
+  setText("securityMissing", Number.isFinite(summary.missing) ? String(summary.missing) : "Unavailable");
+  setText("securityCookies", Number.isFinite(cookies.total) ? String(cookies.total) : "Unavailable");
+  $("securityList").replaceChildren(...checks.map((check) => {
+    const item = document.createElement("article");
+    item.className = "security-item";
+    const copy = document.createElement("div");
+    copy.className = "security-copy";
+    const name = document.createElement("span");
+    name.className = "security-name";
+    name.textContent = check.name;
+    const evidence = document.createElement("p");
+    evidence.className = "security-evidence";
+    evidence.textContent = check.evidence;
+    const state = document.createElement("span");
+    const stateName = check.state || (check.present ? "pass" : "missing");
+    state.className = "security-state is-" + stateName;
+    state.textContent = labels[stateName] || "Info";
+    copy.append(name, evidence);
+    item.append(copy, state);
+    return item;
+  }));
+  setText(
+    "securityFootnote",
+    checks.length
+      ? "Cookie results cover Set-Cookie headers observed on the main document only. These are configuration signals, not a vulnerability assessment."
+      : "Security evidence was unavailable for this response."
+  );
+}
+
 function renderSecurity(security = []) {
   const configured = security.filter((check) => check.present).length;
   setText("securityCount", security.length ? `${configured}/${security.length} set` : "Unavailable");
@@ -147,13 +323,17 @@ function buildReport(data) {
   const technologyLines = (data.technologies || []).length
     ? data.technologies.map((item) => `- ${item.name} (${item.category}): ${item.evidence.join("; ")}`).join("\n")
     : "- No public technology signatures detected";
-  const securityLines = (network.security || []).length
-    ? network.security.map((check) => `- ${check.name}: ${check.present ? "Configured" : "Not found"}`).join("\n")
+  const securityChecks = Array.isArray(network.security) ? network.security : network.security?.checks || [];
+  const securityLines = securityChecks.length
+    ? securityChecks.map((check) => `- ${check.name}: ${check.state || (check.present ? "pass" : "missing")} — ${check.evidence}`).join("\n")
     : "- Unavailable";
   const performance = data.performanceAnalysis || {};
   const navigation = performance.navigation || {};
   const resources = performance.resources || {};
   const runtime = performance.runtime || {};
+ const geolocation = network.geolocation || {};
+ const domain = network.domain || {};
+  const traffic = data.traffic || {};
 
   return [
     "WebScope scan report",
@@ -196,11 +376,33 @@ function buildReport(data) {
     `- Server: ${network.server || "Unavailable"}`,
     `- CDN: ${network.cdn?.name || "Unavailable"}`,
     "",
-    "Technology evidence",
+    "Resolved endpoint location",
+    `- Country: ${geolocation.country || "Unavailable"}`,
+    `- Region / city: ${geolocation.region || "Unavailable"} / ${geolocation.city || "Unavailable"}`,
+    `- Timezone: ${geolocation.timezone || "Unavailable"}`,
+    `- Coordinates: ${formatCoordinates(geolocation.latitude, geolocation.longitude)}`,
+    "",
+    "Domain registration",
+    `- Registered domain: ${domain.domain || "Unavailable"}`,
+    `- Registered: ${formatDate(domain.registeredOn)}`,
+    `- Age: ${formatDomainAge(domain.ageDays)}`,
+    `- Expires: ${formatDate(domain.expiresOn)}`,
+   `- Registrar: ${domain.registrar || "Unavailable"}`,
+   `- Nameservers: ${displayList(domain.nameservers)}`,
+   "",
+    "Traffic intelligence",
+    `- Monthly visits (estimated): ${formatNumber(traffic.monthlyVisits)}`,
+    `- Global rank: ${Number.isFinite(traffic.globalRank) ? "#" + traffic.globalRank.toLocaleString() : "Unavailable"}`,
+    `- Provider / confidence: ${traffic.provider || "Unavailable"} / ${traffic.confidence || "Not provided"}`,
+    `- Updated: ${formatDate(traffic.updatedAt)}`,
+    `- Top countries: ${formatTrafficBreakdown(traffic.countries || []) || "Unavailable"}`,
+    `- Traffic sources: ${formatTrafficBreakdown(traffic.channels || []) || "Unavailable"}`,
+    "",
+   "Technology evidence",
     technologyLines,
     "",
-    "Security snapshot",
-    securityLines
+    "Security analysis",
+   securityLines
   ].join("\n");
 }
 
@@ -226,11 +428,20 @@ function render(data) {
   renderResourceSummary(data.resourceSummary);
   renderRuntimeHealth(data.performanceAnalysis);
   renderTechnologies(data.technologies);
+  renderTraffic(null);
+  fillTrafficForm(null);
+  void loadTraffic(data).then(() => {
+    if (currentScan === data) fillTrafficForm(data.traffic);
+  });
   if (data.network) {
     renderNetwork(data.network);
-    renderSecurity(data.network.security);
+    renderGeolocation(data.network.geolocation);
+    renderDomain(data.network.domain);
+    renderSecurityAnalysis(data.network.security);
   } else {
-    renderSecurity();
+    renderGeolocation();
+    renderDomain();
+    renderSecurityAnalysis();
   }
   $("copyReport").disabled = false;
   $("loading").hidden = true;
@@ -262,4 +473,47 @@ $("copyReport").addEventListener("click", async () => {
   }
   setTimeout(() => { button.textContent = "Copy report"; }, 1400);
 });
+
+$("trafficForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const key = trafficStorageKey();
+  if (!key || !currentScan) return;
+  const optionalNumber = (value, minimum) => {
+    if (value === "") return null;
+    const number = Number(value);
+    return Number.isFinite(number) && number >= minimum ? Math.round(number) : null;
+  };
+  const traffic = {
+    provider: $("trafficProviderInput").value.trim(),
+    monthlyVisits: optionalNumber($("trafficVisitsInput").value, 0),
+    globalRank: optionalNumber($("trafficRankInput").value, 1),
+    confidence: $("trafficConfidenceInput").value,
+    countries: parseTrafficBreakdown($("trafficCountriesInput").value),
+    channels: parseTrafficBreakdown($("trafficChannelsInput").value),
+    updatedAt: new Date().toISOString()
+  };
+  if (!traffic.provider) return;
+  try {
+    await chrome.storage.local.set({ [key]: traffic });
+    currentScan.traffic = traffic;
+    renderTraffic(traffic);
+    $("trafficForm").closest("details").open = false;
+  } catch {
+    setText("trafficFootnote", "The traffic estimate could not be saved locally.");
+  }
+});
+
+$("clearTraffic").addEventListener("click", async () => {
+  const key = trafficStorageKey();
+  if (!key || !currentScan) return;
+  try {
+    await chrome.storage.local.remove(key);
+    currentScan.traffic = null;
+    fillTrafficForm(null);
+    renderTraffic(null);
+  } catch {
+    setText("trafficFootnote", "The saved traffic estimate could not be cleared.");
+  }
+});
+
 scan();
