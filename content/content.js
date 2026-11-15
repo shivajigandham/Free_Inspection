@@ -31,6 +31,44 @@ if (!globalThis.__webscopeCollectorInstalledV5) {
       }, { total: 0, transferSize: 0, scripts: 0, images: 0, stylesheets: 0, fonts: 0, other: 0 });
 
       const performanceAnalysis = globalThis.WebScopePerformance?.collect?.() || null;
+      const currentUrl = new URL(location.href);
+      const resourceSelectors = [
+        "script[src]",
+        "link[href]",
+        "img[src]",
+        "iframe[src]",
+        "audio[src]",
+        "video[src]",
+        "source[src]"
+      ];
+      const insecureResources = resourceSelectors.flatMap((selector) => [...document.querySelectorAll(selector)])
+        .map((element) => element.src || element.href || "")
+        .filter(Boolean)
+        .filter((value) => {
+          try {
+            return new URL(value, location.href).protocol === "http:";
+          } catch {
+            return false;
+          }
+        });
+      const passwordForms = [...document.forms].filter((form) => form.querySelector('input[type="password"]'));
+      const insecurePasswordForms = passwordForms.filter((form) => {
+        try {
+          return new URL(form.getAttribute("action") || location.href, location.href).protocol === "http:";
+        } catch {
+          return false;
+        }
+      });
+      const metaContent = (selector) => document.querySelector(selector)?.getAttribute("content") || "";
+      const securitySignals = {
+        isHttps: currentUrl.protocol === "https:",
+        metaCsp: metaContent('meta[http-equiv="content-security-policy" i]'),
+        metaReferrer: metaContent('meta[name="referrer" i]'),
+        insecureResourceCount: insecureResources.length,
+        insecureResourceExamples: [...new Set(insecureResources)].slice(0, 3),
+        passwordFormCount: passwordForms.length,
+        insecurePasswordFormCount: insecurePasswordForms.length
+      };
 
       sendResponse({
         url: location.href,
@@ -52,6 +90,7 @@ if (!globalThis.__webscopeCollectorInstalledV5) {
         userAgent,
         resourceSummary,
         performanceAnalysis,
+        securitySignals,
         technologies: globalThis.WebScopeTechnology?.detect?.() || []
       });
     }, 30);
